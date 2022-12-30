@@ -19,7 +19,9 @@ class SaleOrderInherit(models.Model):
                 for new_line in new_so_line_ids:
                     qty_count += new_line.product_uom_qty
                 bom_line_section = self.env['sale.order.line'].sudo().search(
-                    [('name', '=', so_line.product_id.name), ('order_id', '=', self.id)])
+                    [('display_type', '=', 'line_section'), ('name', '=', so_line.product_id.name),
+                     ('order_id', '=', self.id),
+                     ('product_id', '=', False)])
                 bom_line_section.write({'name': str(so_line.product_id.name) + ' (' + str(qty_count) + ')'})
                 # list product with no BOM at the end
                 if not new_so_line_ids:
@@ -54,7 +56,8 @@ class SaleOrderInherit(models.Model):
 
     def create_so_line(self, bom_line, so_line):
         is_line_section = self.env['sale.order.line'].sudo().search(
-            [('name', '=', so_line.product_id.name), ('order_id', '=', self.id)])
+            [('display_type', '=', 'line_section'), ('name', '=', so_line.product_id.name), ('order_id', '=', self.id),
+             ('product_id', '=', False)])
         if not is_line_section:
             line_section = {
                 'name': so_line.product_id.name,
