@@ -6,12 +6,13 @@
         <field name="inherit_id" ref="sale.view_order_form"/>
         <field name="arch" type="xml">
             <xpath expr="//header" position="inside">
+
                 <field name="is_bom_extracted" invisible="1"/>
                 <button name="extract_product_bom" string="Extract BOM" type="object" attrs="{'invisible':['|',('is_bom_extracted','!=',False),('state','!=','draft')]}"/>
             </xpath>
-            <!--<xpath expr="//field[@name='order_line']//tree" position="inside">
-                <field name="product_count" attrs="{'invisible':[('display_type','!=','line_section')]}"/>
-            </xpath>-->
+            <xpath expr="//page[@name='order_lines']//field[@name='order_line']" position="attributes">
+                <attribute name="widget">section_and_note_one2many_expand</attribute>
+            </xpath>
         </field>
     </record>
 
