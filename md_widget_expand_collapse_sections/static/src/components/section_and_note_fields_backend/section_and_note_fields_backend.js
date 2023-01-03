@@ -63,8 +63,7 @@ export class ExpandListRenderer extends SectionAndNoteListRenderer {
     }
 }
 
-/*ExpandListRenderer.template = "bom_to_sale_order.ExpandListRenderer";*/
-ExpandListRenderer.recordRowTemplate = "bom_to_sale_order.ExpandListRenderer.RecordRow";
+ExpandListRenderer.recordRowTemplate = "md_widget_expand_collapse_sections.ExpandListRenderer.RecordRow";
 
 export class SectionAndNoteFieldOne2ManyExpand extends SectionAndNoteFieldOne2Many {}
 SectionAndNoteFieldOne2ManyExpand.components = {
