@@ -1,4 +1,4 @@
-from odoo import models, fields
+from odoo import models, fields,api
 
 
 class SaleOrderInherit(models.Model):
@@ -24,10 +24,19 @@ class SaleOrderInherit(models.Model):
                     # unlink so with
                     so_line.unlink()
 
+        self.calculate_kit_total_value()
+
+    @api.onchange('order_line')
+    def onchange_order_line(self):
+        self.calculate_kit_total_value()
+
+    def calculate_kit_total_value(self):
         bom_heads = self.order_line.filtered(lambda line:line.is_bom_head).sorted(key=lambda r: r.sequence,reverse=True)
         for rec in bom_heads:
-            unit_price = sum(self.order_line.filtered(lambda line:line.parent_bom_product_id.id == rec.product_id.id).mapped('price_subtotal'))
-            rec.price_unit = unit_price
+            unit_price = sum(self.order_line.filtered(lambda line:line.parent_bom_product_id.id == rec.product_id.id and line.product_id.id != rec.product_id.id).mapped('price_subtotal'))
+            rec.write({
+                'price_unit':unit_price
+            })
 
     def is_bom_kit_prod(self, product_id, so_line, new_so_line_ids, sequence, bom_qty):
         bom_id = self._get_bom(product_id)
@@ -122,3 +131,37 @@ class SaleOrderInlineInherit(models.Model):
     is_bom_head = fields.Boolean()
     is_sub_product = fields.Boolean()
     parent_bom_product_id = fields.Many2one('product.product')
+
+    # @api.onchange('order_line','order_line.product_id','order_line.price_unit','order_line.product_uom_qty')
+    # def _onchange_line(self):
+    #     self.calculate_kit_total_value()
+
+
+    # @api.onchange('product_id')
+    # def _onchange_product_id_warning(self):
+    #     res = super(SaleOrderInlineInherit,self)._onchange_product_id_warning()
+    #     self.order_id.calculate_kit_total_value()
+    #     return res
+    #
+    # @api.onchange('price_unit')
+    # def _onchange_unit_price(self):
+    #     self.order_id.calculate_kit_total_value()
+    # @api.onchange('product_uom_qty')
+    # def _onchange_unit_price(self):
+    #     self.order_id.calculate_kit_total_value()
+
+
+    # def write(self, vals):
+    #     res = super(SaleOrderInlineInherit,self).write(vals)
+    #
+    #     if 'price_unit' in vals or 'product_uom_qty' in vals or 'product_id' in vals:
+    #         self.order_id.calculate_kit_total_value()
+    #
+    #     return res
+
+    # @api.onchange('price_subtotal')
+    # def _onchange_unit_price(self):
+    #     self.order_id.calculate_kit_total_value()
+    # @api.onchange('product_uom_qty')
+    # def _onchange_unit_price(self):
+    #     self.order_id.calculate_kit_total_value()
