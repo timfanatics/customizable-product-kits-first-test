@@ -19,7 +19,7 @@
     'version': '15.1.0.0',
 
     # any module necessary for this one to work correctly
-    'depends': ['mrp','md_widget_expand_collapse_sections'],
+    'depends': ['mrp','sale_management'],
 
     # always loaded
     'data': [
@@ -28,8 +28,13 @@
     ],
 
     'assets': {
+        'web.assets_backend': [
+            'bom_to_sale_order/static/src/scss/so_lines.scss',
+        ],
     },
     # only loaded in demonstration mode
     'demo': [
     ],
+    'application':True,
+    'auto_install':False,
 }

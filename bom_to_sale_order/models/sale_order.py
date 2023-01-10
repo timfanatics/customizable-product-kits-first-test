@@ -24,25 +24,20 @@ class SaleOrderInherit(models.Model):
                     # unlink so with
                     so_line.unlink()
 
-            # adding line section for products without BOM
-            line_section = {
-                'name': ' ',
-                'display_type': 'line_section',
-                'sequence': 999,
-                'order_id': self.id,
-            }
-            self.env['sale.order.line'].sudo().create(line_section)
-
+        bom_heads = self.order_line.filtered(lambda line:line.is_bom_head).sorted(key=lambda r: r.sequence,reverse=True)
+        for rec in bom_heads:
+            unit_price = sum(self.order_line.filtered(lambda line:line.parent_bom_product_id.id == rec.product_id.id).mapped('price_unit'))
+            rec.price_unit = unit_price
     def is_bom_kit_prod(self, product_id, so_line, new_so_line_ids, sequence, bom_qty):
         bom_id = self._get_bom(product_id)
         if bom_id:
-            line_sect_id = self.create_so_line_section(product_id.name, sequence, so_line, bom_qty)
+            line_sect_id = self.create_so_line_section(sequence, product_id,so_line)
             sequence = sequence + 1
             if bom_id[0].bom_line_ids:
                 self.is_bom_extracted = True
                 for bom_line in bom_id.bom_line_ids:
                     print('line section', line_sect_id.name)
-                    new_so_line = self.create_so_line_product(bom_line, so_line, sequence)
+                    new_so_line = self.create_so_line_product(bom_line, so_line, sequence,product_id)
 
                     if new_so_line:
                         new_so_line_ids.append(new_so_line)
@@ -54,30 +49,35 @@ class SaleOrderInherit(models.Model):
         else:
             return False, sequence
 
-    def create_so_line_product(self, bom_line, so_line, sequence):
+    def create_so_line_product(self, bom_line, so_line, sequence,head_product_id):
 
         bom_id = self._get_bom(bom_line.product_id)
         if bom_id:
             return False
-
+        head_kit_prod_id = self._get_bom_service_product(head_product_id)
         order_line_vals = {
             'product_id': bom_line.product_id.id,
             'product_uom_qty': bom_line.product_qty * so_line.product_uom_qty,
             'price_unit': bom_line.product_id.list_price,
             'sequence': sequence,
             'order_id': self.id,
+            'is_sub_product': True,
+            'parent_bom_product_id': head_kit_prod_id.id
         }
         new_so_id = self.env['sale.order.line'].sudo().create(order_line_vals)
         return new_so_id
 
-    def create_so_line_section(self, section_name, sequence, so_line, bom_qty):
-        qty = bom_qty * so_line.product_uom_qty
-        section = str(section_name) + ' (' + str(qty) + ')'
+    def create_so_line_section(self, sequence, product_id,so_line):
+        service_product = self._get_bom_service_product(product_id)
+        parent_service_product = self._get_bom_service_product(so_line.product_id)
         line_section = {
-            'name': section,
-            'display_type': 'line_section',
+            'product_id': service_product.id,
+            'product_uom_qty': 1,
+            'price_unit': 0,
+            'is_bom_head': True,
             'sequence': sequence - 1,
             'order_id': self.id,
+            'parent_bom_product_id': parent_service_product.id
         }
         line_sect_id = self.env['sale.order.line'].sudo().create(line_section)
         return line_sect_id
@@ -89,3 +89,23 @@ class SaleOrderInherit(models.Model):
                 [('product_tmpl_id', '=', product_id.product_tmpl_id.id), ('type', '=', 'phantom')])
 
         return bom_id
+
+    def _get_bom_service_product(self, bom_product_id):
+        product_name = bom_product_id.name + " KIT"
+        product = self.env['product.product'].search([('name', '=', product_name), ('detailed_type', '=', 'service')])
+        if not product:
+            product_vals = {
+                'name': product_name,
+                'detailed_type': 'service',
+                'categ_id': bom_product_id.categ_id.id,
+            }
+            product = self.env['product.product'].create(product_vals)
+
+        return product
+
+
+class SaleOrderInlineInherit(models.Model):
+    _inherit = 'sale.order.line'
+    is_bom_head = fields.Boolean()
+    is_sub_product = fields.Boolean()
+    parent_bom_product_id = fields.Many2one('product.product')

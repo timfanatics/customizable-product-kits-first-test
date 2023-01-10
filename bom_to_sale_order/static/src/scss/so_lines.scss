@@ -1,0 +1,10 @@
+.o_sale_order{
+    .o_field_section_and_note_one2many{
+        tr.text-danger{
+            background-color: gray !important;
+        }
+        .text-danger{
+            color:white !important;
+        }
+    }
+}
