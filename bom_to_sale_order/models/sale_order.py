@@ -26,8 +26,9 @@ class SaleOrderInherit(models.Model):
 
         bom_heads = self.order_line.filtered(lambda line:line.is_bom_head).sorted(key=lambda r: r.sequence,reverse=True)
         for rec in bom_heads:
-            unit_price = sum(self.order_line.filtered(lambda line:line.parent_bom_product_id.id == rec.product_id.id).mapped('price_unit'))
+            unit_price = sum(self.order_line.filtered(lambda line:line.parent_bom_product_id.id == rec.product_id.id).mapped('price_subtotal'))
             rec.price_unit = unit_price
+
     def is_bom_kit_prod(self, product_id, so_line, new_so_line_ids, sequence, bom_qty):
         bom_id = self._get_bom(product_id)
         if bom_id:
@@ -58,13 +59,25 @@ class SaleOrderInherit(models.Model):
         order_line_vals = {
             'product_id': bom_line.product_id.id,
             'product_uom_qty': bom_line.product_qty * so_line.product_uom_qty,
-            'price_unit': bom_line.product_id.list_price,
+            'price_unit': 0,
             'sequence': sequence,
             'order_id': self.id,
             'is_sub_product': True,
             'parent_bom_product_id': head_kit_prod_id.id
         }
         new_so_id = self.env['sale.order.line'].sudo().create(order_line_vals)
+
+        price = new_so_id.with_company(new_so_id.company_id)._get_display_price()
+        unit_price = new_so_id.product_id._get_tax_included_unit_price(
+                    new_so_id.company_id,
+                    new_so_id.order_id.currency_id,
+                    new_so_id.order_id.date_order,
+                    'sale',
+                    fiscal_position=new_so_id.order_id.fiscal_position_id,
+                    product_price_unit=price,
+                    product_currency=new_so_id.currency_id
+                )
+        new_so_id.price_unit = unit_price
         return new_so_id
 
     def create_so_line_section(self, sequence, product_id,so_line):
