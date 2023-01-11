@@ -11,18 +11,19 @@ class SaleOrderInherit(models.Model):
         if self.order_line:
             so_line_seq = 2
             for so_line in self.order_line:
-                new_so_line_ids = []
-                so_line.sequence = so_line_seq
-                new_sol_lines, so_line_seq = self.is_bom_kit_prod(so_line.product_id, so_line, new_so_line_ids,
-                                                                  so_line_seq, bom_qty=1)
-                pass
+                if so_line.is_bom_extracted is False:
+                    new_so_line_ids = []
+                    so_line.sequence = so_line_seq
+                    new_sol_lines, so_line_seq = self.is_bom_kit_prod(so_line.product_id, so_line, new_so_line_ids,
+                                                                      so_line_seq, bom_qty=1)
+                    pass
 
-                # list product with no BOM at the end
-                if not new_so_line_ids:
-                    self.env['sale.order.line'].browse(so_line.id).write({'sequence': 1000})
-                else:
-                    # unlink so with
-                    so_line.unlink()
+                    # list product with no BOM at the end
+                    if not new_so_line_ids:
+                        self.env['sale.order.line'].browse(so_line.id).write({'sequence': 1000})
+                    else:
+                        # unlink so with
+                        so_line.unlink()
 
         self.calculate_kit_total_value()
 
@@ -130,38 +131,6 @@ class SaleOrderInlineInherit(models.Model):
     _inherit = 'sale.order.line'
     is_bom_head = fields.Boolean()
     is_sub_product = fields.Boolean()
+    is_bom_extracted = fields.Boolean()
     parent_bom_product_id = fields.Many2one('product.product')
 
-    # @api.onchange('order_line','order_line.product_id','order_line.price_unit','order_line.product_uom_qty')
-    # def _onchange_line(self):
-    #     self.calculate_kit_total_value()
-
-
-    # @api.onchange('product_id')
-    # def _onchange_product_id_warning(self):
-    #     res = super(SaleOrderInlineInherit,self)._onchange_product_id_warning()
-    #     self.order_id.calculate_kit_total_value()
-    #     return res
-    #
-    # @api.onchange('price_unit')
-    # def _onchange_unit_price(self):
-    #     self.order_id.calculate_kit_total_value()
-    # @api.onchange('product_uom_qty')
-    # def _onchange_unit_price(self):
-    #     self.order_id.calculate_kit_total_value()
-
-
-    # def write(self, vals):
-    #     res = super(SaleOrderInlineInherit,self).write(vals)
-    #
-    #     if 'price_unit' in vals or 'product_uom_qty' in vals or 'product_id' in vals:
-    #         self.order_id.calculate_kit_total_value()
-    #
-    #     return res
-
-    # @api.onchange('price_subtotal')
-    # def _onchange_unit_price(self):
-    #     self.order_id.calculate_kit_total_value()
-    # @api.onchange('product_uom_qty')
-    # def _onchange_unit_price(self):
-    #     self.order_id.calculate_kit_total_value()
