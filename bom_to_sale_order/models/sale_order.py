@@ -1,4 +1,4 @@
-from odoo import models, fields,api
+from odoo import models, fields, api
 
 
 class SaleOrderInherit(models.Model):
@@ -11,7 +11,7 @@ class SaleOrderInherit(models.Model):
         if self.order_line:
             so_line_seq = 2
             for so_line in self.order_line:
-                if so_line.is_bom_extracted is False:
+                if so_line.is_bom_extracted is False and so_line.display_type != 'line_section':
                     new_so_line_ids = []
                     so_line.sequence = so_line_seq
                     new_sol_lines, so_line_seq = self.is_bom_kit_prod(so_line.product_id, so_line, new_so_line_ids,
@@ -19,11 +19,20 @@ class SaleOrderInherit(models.Model):
                     pass
 
                     # list product with no BOM at the end
-                    if not new_so_line_ids:
+                    if not new_so_line_ids and so_line.is_bom_extracted is False:
                         self.env['sale.order.line'].browse(so_line.id).write({'sequence': 1000})
                     else:
                         # unlink so with
                         so_line.unlink()
+
+        if self.order_line.filtered(lambda line: line.is_bom_extracted is False):
+            if not self.order_line.filtered(lambda so_line: so_line.display_type == 'line_section'):
+                self.env['sale.order.line'].sudo().create({
+                    'display_type': 'line_section',
+                    'name': ' ',
+                    'sequence': 999,
+                    'order_id': self.id
+                })
 
         self.calculate_kit_total_value()
 
@@ -32,23 +41,27 @@ class SaleOrderInherit(models.Model):
         self.calculate_kit_total_value()
 
     def calculate_kit_total_value(self):
-        bom_heads = self.order_line.filtered(lambda line:line.is_bom_head).sorted(key=lambda r: r.sequence,reverse=True)
+        bom_heads = self.order_line.filtered(lambda line: line.is_bom_head).sorted(key=lambda r: r.sequence,
+                                                                                   reverse=True)
         for rec in bom_heads:
-            unit_price = sum(self.order_line.filtered(lambda line:line.parent_bom_product_id.id == rec.product_id.id and line.product_id.id != rec.product_id.id).mapped('price_subtotal'))
+            unit_price = sum(self.order_line.filtered(lambda
+                                                          line: line.parent_bom_product_id.id == rec.product_id.id and line.product_id.id != rec.product_id.id).mapped(
+                'price_subtotal'))
             rec.write({
-                'price_unit':unit_price
+                'price_unit': unit_price
             })
 
     def is_bom_kit_prod(self, product_id, so_line, new_so_line_ids, sequence, bom_qty):
         bom_id = self._get_bom(product_id)
         if bom_id:
-            line_sect_id = self.create_so_line_section(sequence, product_id,so_line)
+            so_line.is_bom_extracted = True
+            line_sect_id = self.create_so_line_section(sequence, product_id, so_line)
             sequence = sequence + 1
             if bom_id[0].bom_line_ids:
                 self.is_bom_extracted = True
                 for bom_line in bom_id.bom_line_ids:
                     print('line section', line_sect_id.name)
-                    new_so_line = self.create_so_line_product(bom_line, so_line, sequence,product_id)
+                    new_so_line = self.create_so_line_product(bom_line, so_line, sequence, product_id)
 
                     if new_so_line:
                         new_so_line_ids.append(new_so_line)
@@ -60,7 +73,7 @@ class SaleOrderInherit(models.Model):
         else:
             return False, sequence
 
-    def create_so_line_product(self, bom_line, so_line, sequence,head_product_id):
+    def create_so_line_product(self, bom_line, so_line, sequence, head_product_id):
 
         bom_id = self._get_bom(bom_line.product_id)
         if bom_id:
@@ -72,6 +85,7 @@ class SaleOrderInherit(models.Model):
             'price_unit': 0,
             'sequence': sequence,
             'order_id': self.id,
+            'is_bom_extracted': True,
             'is_sub_product': True,
             'parent_bom_product_id': head_kit_prod_id.id
         }
@@ -79,18 +93,18 @@ class SaleOrderInherit(models.Model):
 
         price = new_so_id.with_company(new_so_id.company_id)._get_display_price()
         unit_price = new_so_id.product_id._get_tax_included_unit_price(
-                    new_so_id.company_id,
-                    new_so_id.order_id.currency_id,
-                    new_so_id.order_id.date_order,
-                    'sale',
-                    fiscal_position=new_so_id.order_id.fiscal_position_id,
-                    product_price_unit=price,
-                    product_currency=new_so_id.currency_id
-                )
+            new_so_id.company_id,
+            new_so_id.order_id.currency_id,
+            new_so_id.order_id.date_order,
+            'sale',
+            fiscal_position=new_so_id.order_id.fiscal_position_id,
+            product_price_unit=price,
+            product_currency=new_so_id.currency_id
+        )
         new_so_id.price_unit = unit_price
         return new_so_id
 
-    def create_so_line_section(self, sequence, product_id,so_line):
+    def create_so_line_section(self, sequence, product_id, so_line):
         service_product = self._get_bom_service_product(product_id)
         parent_service_product = self._get_bom_service_product(so_line.product_id)
         line_section = {
@@ -98,6 +112,7 @@ class SaleOrderInherit(models.Model):
             'product_uom_qty': 1,
             'price_unit': 0,
             'is_bom_head': True,
+            'is_bom_extracted': True,
             'sequence': sequence - 1,
             'order_id': self.id,
             'parent_bom_product_id': parent_service_product.id
@@ -130,7 +145,8 @@ class SaleOrderInherit(models.Model):
 class SaleOrderInlineInherit(models.Model):
     _inherit = 'sale.order.line'
     is_bom_head = fields.Boolean()
+    is_root_bom = fields.Boolean()
     is_sub_product = fields.Boolean()
     is_bom_extracted = fields.Boolean()
     parent_bom_product_id = fields.Many2one('product.product')
-
+    # bom_line_qty = fields.Integer()
