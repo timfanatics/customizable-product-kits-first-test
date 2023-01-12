@@ -6,7 +6,7 @@
         <field name="inherit_id" ref="sale.view_order_form"/>
         <field name="arch" type="xml">
             <xpath expr="//header" position="inside">
-                <field name="is_bom_extracted" invisible="1"/>
+                <!--<field name="is_bom_extracted" invisible="1"/>-->
                 <button name="extract_product_bom" string="Extract BOM" type="object"
                         attrs="{'invisible':[('state','!=','draft')]}"/>
             </xpath>
