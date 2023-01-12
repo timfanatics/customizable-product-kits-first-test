@@ -39,6 +39,7 @@ class SaleOrderInherit(models.Model):
     @api.onchange('order_line')
     def onchange_order_line(self):
         self.calculate_kit_total_value()
+        # self.calculate_sub_products_qty()
 
     def calculate_kit_total_value(self):
         bom_heads = self.order_line.filtered(lambda line: line.is_bom_head).sorted(key=lambda r: r.sequence,
@@ -51,6 +52,12 @@ class SaleOrderInherit(models.Model):
                 'price_unit': unit_price
             })
 
+    # def calculate_sub_products_qty(self):
+    #     for line in self.order_line:
+    #         if line.head_line_id:
+    #             head_line_obj = self.env['sale.order.line'].browse(line.head_line_id)
+    #             line.product_uom_qty = head_line_obj.product_uom_qty * line.product_uom_qty
+
     def is_bom_kit_prod(self, product_id, so_line, new_so_line_ids, sequence, bom_qty):
         bom_id = self._get_bom(product_id)
         if bom_id:
@@ -61,7 +68,7 @@ class SaleOrderInherit(models.Model):
                 self.is_bom_extracted = True
                 for bom_line in bom_id.bom_line_ids:
                     print('line section', line_sect_id.name)
-                    new_so_line = self.create_so_line_product(bom_line, so_line, sequence, product_id)
+                    new_so_line = self.create_so_line_product(bom_line, so_line, sequence, product_id, line_sect_id)
 
                     if new_so_line:
                         new_so_line_ids.append(new_so_line)
@@ -73,7 +80,7 @@ class SaleOrderInherit(models.Model):
         else:
             return False, sequence
 
-    def create_so_line_product(self, bom_line, so_line, sequence, head_product_id):
+    def create_so_line_product(self, bom_line, so_line, sequence, head_product_id, line_sect_id):
 
         bom_id = self._get_bom(bom_line.product_id)
         if bom_id:
@@ -85,6 +92,8 @@ class SaleOrderInherit(models.Model):
             'price_unit': 0,
             'sequence': sequence,
             'order_id': self.id,
+            'bom_line_qty': bom_line.product_qty,
+            'head_line_id': line_sect_id,
             'is_bom_extracted': True,
             'is_sub_product': True,
             'parent_bom_product_id': head_kit_prod_id.id
@@ -149,4 +158,15 @@ class SaleOrderInlineInherit(models.Model):
     is_sub_product = fields.Boolean()
     is_bom_extracted = fields.Boolean()
     parent_bom_product_id = fields.Many2one('product.product')
-    # bom_line_qty = fields.Integer()
+    bom_line_qty = fields.Integer()
+    head_line_id = fields.Integer()
+
+    @api.onchange('product_uom_qty')
+    def _onchange_product_uom_qty(self):
+        sub_kit_lines = self.env['sale.order.line'].sudo().search([('head_line_id', '=', self._origin.id)])
+        if sub_kit_lines:
+            for line in sub_kit_lines:
+                qty = line.bom_line_qty * self.product_uom_qty
+                line.write({
+                    'product_uom_qty': qty
+                })
