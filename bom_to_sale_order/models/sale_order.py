@@ -36,9 +36,11 @@ class SaleOrderInherit(models.Model):
                 'order_id': self.id
             })
 
+
+        # self.recompute_kit_qty()
         self.calculate_kit_total_value()
 
-    def is_bom_kit_prod(self, product_id,qty_required, new_so_line_ids, sequence, parent_line_id=False):
+    def is_bom_kit_prod(self, product_id,qty_required, new_so_line_ids, sequence, parent_line_id=False,bom_line_id=False):
         """
         This method calls itself recursively to extract kit type bom and subkits
         :param product_id: product to check for bom and sub boms
@@ -56,13 +58,13 @@ class SaleOrderInherit(models.Model):
         """
         bom_id = self._get_bom(product_id)
         if bom_id:
-            parent_line_id = self.create_so_line_section(sequence, product_id,parent_line_id)
+            parent_line_id = self.create_so_line_section(sequence, product_id,parent_line_id,bom_line_id)
             sequence = sequence + 1
             for bom_line in bom_id.bom_line_ids:
                 new_so_line = self.create_so_line_product(bom_line, qty_required, sequence, parent_line_id)
                 if new_so_line:
                     new_so_line_ids.append(new_so_line)
-                sequence = self.is_bom_kit_prod(product_id=bom_line.product_id,qty_required=bom_line.product_qty*qty_required, new_so_line_ids=new_so_line_ids, sequence=sequence,parent_line_id=parent_line_id)
+                sequence = self.is_bom_kit_prod(product_id=bom_line.product_id,qty_required=bom_line.product_qty*qty_required, new_so_line_ids=new_so_line_ids, sequence=sequence,parent_line_id=parent_line_id,bom_line_id=bom_line.id)
                 sequence = sequence + 1
             return sequence
         else:
@@ -112,7 +114,7 @@ class SaleOrderInherit(models.Model):
         new_so_id.price_unit = unit_price
         return new_so_id
 
-    def create_so_line_section(self, sequence, product_id,parent_line_id=False):
+    def create_so_line_section(self, sequence, product_id,parent_line_id=False,bom_line_id=False):
         """
         This product creates a new parent/section/service product for all it's subkit or sub products of a kit
         :param sequence: ver important parameters, it will place the parent exactly before it's child
@@ -135,6 +137,7 @@ class SaleOrderInherit(models.Model):
             'sequence': sequence - 1,
             'order_id': self.id,
             'parent_line_id': parent_line_id,
+            'bom_line_id':bom_line_id,
         }
         parent_line_id = self.env['sale.order.line'].sudo().create(line_section)
         return parent_line_id.id
@@ -148,7 +151,7 @@ class SaleOrderInherit(models.Model):
 
     def _get_bom_service_product(self, bom_product_id):
         product_name = bom_product_id.name + " KIT"
-        product = self.env['product.product'].search([('name', '=', product_name), ('detailed_type', '=', 'service')])
+        product = self.env['product.product'].search([('name', '=', product_name), ('detailed_type', '=', 'service'),('active','in',(True,False))])
         if not product:
             product_vals = {
                 'name': product_name,
@@ -158,34 +161,40 @@ class SaleOrderInherit(models.Model):
             }
             product = self.env['product.product'].create(product_vals)
         # Just archiving this product because we don't need to
-        elif product.active:
-            product.active = False
-        return product
+        elif any(product.filtered(lambda x:x.active)):
+            for rec in product.filtered(lambda x:not x.active):
+                rec.active = False
+
+        return product[0]
 
 
     @api.onchange('order_line')
     def onchange_order_line(self):
+        self.ensure_one()
+        bom_head = self.order_line.filtered(lambda line: line.is_current_line_head)
+        if bom_head:
+            for head in bom_head:
+                head._origin.is_current_line_head = False
+            self.recompute_kit_qty(bom_head[0])
         self.calculate_kit_total_value()
-        # is_current_line_head = self.order_line.filtered(lambda x:x.is_current_line_head)
-        # if is_current_line_head:
-        #     self.compute_qty_of_sub_products()
 
+    def recompute_kit_qty(self,bom_head):
+        qty_required = bom_head.product_uom_qty
+        sub_kit_products = self.order_line.filtered(lambda x:x.parent_line_id.id == bom_head._origin.id)
+        for line in sub_kit_products:
+                bom_qty = line.bom_line_id.product_qty
+                qty = bom_qty * qty_required
+                line.update({
+                    'product_uom_qty':qty
+                })
     def calculate_kit_total_value(self):
         bom_heads = self.order_line.filtered(lambda line: line.is_bom_head).sorted(key=lambda r: r.sequence, reverse=True)
         for rec in bom_heads:
             unit_price = sum(self.order_line.filtered(lambda line: line.parent_line_id.id == rec._origin.id).mapped('price_subtotal'))
             rec.write({
-                'price_unit': unit_price
+                'price_unit': unit_price,
+                'price_subtotal': unit_price
             })
-    def compute_qty_of_sub_products(self):
-        current_line_head = self.order_line.filtered(lambda x:x.is_current_line_head)
-        for line in self.order_line.filtered(lambda m:m.parent_line_id.id == current_line_head.id):
-            if line.bom_line_id:
-                qty = line.bom_line_id.product_qty * current_line_head.product_uom_qty
-                # line.product_uom_qty = qty
-                line.write({
-                    'product_uom_qty': qty
-                })
 
     @api.depends('order_line.price_subtotal', 'order_line.price_tax', 'order_line.price_total')
     def _compute_amounts(self):
@@ -215,42 +224,11 @@ class SaleOrderInherit(models.Model):
                 # Calculating total based on: parents only or products without bom or newly added products
                 order_lines = order._get_lines_for_total()
                 # order_lines = order.order_line.filtered(lambda x: not x.display_type)
-                order.tax_totals = self.env['account.tax']._prepare_tax_totals(
+                tax_totals = self.env['account.tax']._prepare_tax_totals(
                     [x._convert_to_tax_base_line_dict() for x in order_lines],
                     order.currency_id,
                 )
+                order.tax_totals = tax_totals
             else:
                 super(SaleOrderInherit,self)._compute_tax_totals()
             pass
-class SaleOrderInlineInherit(models.Model):
-    _inherit = 'sale.order.line'
-    is_bom_head = fields.Boolean()
-    is_sub_kit = fields.Boolean()
-    is_sub_product = fields.Boolean()
-    is_bom_extracted = fields.Boolean()
-    # parent_bom_product_id = fields.Many2one('product.product')
-    bom_line_id = fields.Many2one('mrp.bom.line')
-    is_empty_section = fields.Boolean()
-
-    # head_line_id = fields.Many2one('sale.order.line')
-
-    parent_line_id = fields.Many2one('sale.order.line')
-    is_current_line_head = fields.Boolean()
-    # sub_kit_line_id = fields.Integer()
-
-    # @api.onchange('product_uom_qty')
-    # def _onchange_product_uom_qty(self):
-    #     # sub_kit_lines = self.env['sale.order.line'].sudo().search([('parent_line_id', '=', self._origin.id)])
-    #     sub_kit_lines = self.order_id.order_line.filtered(lambda x:x.parent_line_id.id == self._origin.id)
-    #     for line in sub_kit_lines:
-    #         qty = line.bom_line_id.product_qty * self.product_uom_qty
-    #         line._origin.write({
-    #             'product_uom_qty':qty
-    #         })
-
-
-    # @api.onchange('product_uom_qty')
-    # def _onchange_product_uom_qty(self):
-    #     for rec in self:
-    #         if rec._origin.is_bom_head:
-    #             rec._origin.is_current_line_head = True
