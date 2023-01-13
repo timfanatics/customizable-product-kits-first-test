@@ -167,27 +167,45 @@ class SaleOrderInherit(models.Model):
 
         return product[0]
 
-
     @api.onchange('order_line')
     def onchange_order_line(self):
+        '''
+        This method will calculate total value of sections/service products and sub_kits/sub_products quantity, iff any the line changes triggers
+        :return:
+        :rtype:
+        '''
         self.ensure_one()
         bom_head = self.order_line.filtered(lambda line: line.is_current_line_head)
         if bom_head:
             for head in bom_head:
                 head._origin.is_current_line_head = False
-            self.recompute_kit_qty(bom_head[0])
+            self.recompute_kit_qty(bom_head[0],bom_head[0].product_uom_qty)
         self.calculate_kit_total_value()
 
-    def recompute_kit_qty(self,bom_head):
-        qty_required = bom_head.product_uom_qty
+    def recompute_kit_qty(self,bom_head,qty_required):
+        """
+        This metho will recuresively recompute quantites of subkits and subproducts, it will not recompute for the sub kits and sections
+        :param bom_head:
+        :type bom_head:
+        :return:
+        :rtype:
+        """
+        # qty_required = bom_head.product_uom_qty
         sub_kit_products = self.order_line.filtered(lambda x:x.parent_line_id.id == bom_head._origin.id)
         for line in sub_kit_products:
-                bom_qty = line.bom_line_id.product_qty
-                qty = bom_qty * qty_required
+            qty = line.bom_line_id.product_qty * qty_required
+            if not line.is_sub_kit:
                 line.update({
                     'product_uom_qty':qty
                 })
+            self.recompute_kit_qty(line,qty)
+
     def calculate_kit_total_value(self):
+        """
+        This method will recompute total value of sectoins/sub kits as they are based on the total price of their child subkits/subproducts
+        :return:
+        :rtype:
+        """
         bom_heads = self.order_line.filtered(lambda line: line.is_bom_head).sorted(key=lambda r: r.sequence, reverse=True)
         for rec in bom_heads:
             unit_price = sum(self.order_line.filtered(lambda line: line.parent_line_id.id == rec._origin.id).mapped('price_subtotal'))
