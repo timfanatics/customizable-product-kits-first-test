@@ -1,13 +1,13 @@
 .o_sale_order{
     .o_field_section_and_note_one2many{
         tr.text-danger{
-            background-color: gray !important;
+            background-color: #bdbdbd !important;
         }
         tr.text-warning{
             background-color: #d2e2e3 !important;
         }
         .text-danger{
-            color:white !important;
+            color:black !important;
         }
     }
 }
