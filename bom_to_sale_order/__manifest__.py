@@ -19,18 +19,23 @@
     'version': '15.1.0.0',
 
     # any module necessary for this one to work correctly
-    'depends': ['mrp','sale_management'],
+    'depends': ['base','web','mrp','sale'],
 
     # always loaded
     'data': [
         # 'security/ir.model.access.csv',
         'views/sale_order.xml',
-        'views/product.xml',
+        'report/sale_report_templates.xml',
+        'views/sale_portal_templates.xml',
     ],
 
     'assets': {
         'web.assets_backend': [
             'bom_to_sale_order/static/src/scss/so_lines.scss',
+        ],
+        'web.assets_frontend': [
+            'bom_to_sale_order/static/src/scss/so_lines_portal.scss',
+            'bom_to_sale_order/static/src/js/sale_portal_products.js',
         ],
     },
     # only loaded in demonstration mode

@@ -56,16 +56,26 @@ class SaleOrderInlineInherit(models.Model):
     #         if not line.is_bom_head:
     #             super(SaleOrderInlineInherit,self)._compute_price_unit()
 
-    @api.depends('product_uom_qty', 'discount', 'price_unit', 'tax_id')
-    def _compute_amount(self):
-        for line in self:
-            # not computing value for bom heads as they are getting their value from sub product/kits
-            if not line.is_bom_head:
-                super(SaleOrderInlineInherit,self)._compute_amount()
+    # @api.depends('product_uom_qty', 'discount', 'price_unit', 'tax_id')
+    # def _compute_amount(self):
+    #     for line in self:
+    #         # not computing value for bom heads as they are getting their value from sub product/kits
+    #         if not line.is_bom_head:
+    #             super(SaleOrderInlineInherit,self)._compute_amount()
 
-    def _convert_to_tax_base_line_dict(self):
-        res = super()._convert_to_tax_base_line_dict()
-        # updating quantity to 1 for is_bom_head lines, this is to compute totals with qty, as bom heads are getting their value from sub product/kits
-        if self.is_bom_head:
-            res['quantity'] = 1
+    # def _convert_to_tax_base_line_dict(self):
+    #     res = super()._convert_to_tax_base_line_dict()
+    #     # updating quantity to 1 for is_bom_head lines, this is to compute totals with qty, as bom heads are getting their value from sub product/kits
+    #     if self.is_bom_head:
+    #         res['quantity'] = 1
+    #     return res
+
+    def write(self, vals):
+
+        if self.is_bom_head and 'price_unit' not in vals:
+            vals['price_unit'] = self.price_unit
+
+        res = super().write(vals)
+
+
         return res

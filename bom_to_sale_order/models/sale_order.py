@@ -3,7 +3,12 @@ from odoo import models, fields, api
 
 class SaleOrderInherit(models.Model):
     _inherit = 'sale.order'
+    print_folded = fields.Boolean(string='Print Folded',default=True,help="if checked this field will print pdf report in folded state i.e only main products/kits, if uncheck default default report will be printed")
 
+    def _get_order_lines_to_report_heads(self):
+        lines = self.order_line.filtered(lambda m:m.is_bom_head or not m.is_bom_extracted)
+
+        return lines
     def extract_product_bom(self):
         """
         This product will extract bom of all so lines, for whom bom is not already extracted, and will compute the value of parent/sections/service products
@@ -90,7 +95,7 @@ class SaleOrderInherit(models.Model):
         order_line_vals = {
             'product_id': bom_line.product_id.id,
             'product_uom_qty': bom_line.product_qty * qty_required,
-            'price_unit': 0,
+            # 'price_unit': 0,
             'sequence': sequence,
             'order_id': self.id,
             'is_bom_extracted': True,
@@ -131,7 +136,7 @@ class SaleOrderInherit(models.Model):
         line_section = {
             'product_id': service_product.id,
             'product_uom_qty': 1,
-            'price_unit': 0,
+            # 'price_unit': 0,
             'is_bom_head': True,
             'is_bom_extracted': True,
             'sequence': sequence - 1,
@@ -194,10 +199,10 @@ class SaleOrderInherit(models.Model):
         sub_kit_products = self.order_line.filtered(lambda x:x.parent_line_id.id == bom_head._origin.id)
         for line in sub_kit_products:
             qty = line.bom_line_id.product_qty * qty_required
-            if not line.is_sub_kit:
-                line.update({
-                    'product_uom_qty':qty
-                })
+            # if not line.is_sub_kit:
+            line.update({
+                'product_uom_qty':qty
+            })
             self.recompute_kit_qty(line,qty)
 
     def calculate_kit_total_value(self):
@@ -209,8 +214,10 @@ class SaleOrderInherit(models.Model):
         bom_heads = self.order_line.filtered(lambda line: line.is_bom_head).sorted(key=lambda r: r.sequence, reverse=True)
         for rec in bom_heads:
             unit_price = sum(self.order_line.filtered(lambda line: line.parent_line_id.id == rec._origin.id).mapped('price_subtotal'))
+            average_unit_price = self.currency_id.round(unit_price/rec.product_uom_qty)
+            print('average_unit_price' , average_unit_price)
             rec.write({
-                'price_unit': unit_price,
+                'price_unit': average_unit_price,
                 'price_subtotal': unit_price
             })
 

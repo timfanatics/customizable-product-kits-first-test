@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+<template id="report_saleorder_document_inherit_bom_to_so" inherit_id="sale.report_saleorder_document">
+    <xpath expr="//t[@t-set='lines_to_report']" position="after">
+        <t t-if="doc.print_folded" t-set="lines_to_report" t-value="doc._get_order_lines_to_report_heads()"/>
+    </xpath>
+</template>
+</odoo>

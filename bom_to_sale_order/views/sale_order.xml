@@ -5,6 +5,9 @@
         <field name="model">sale.order</field>
         <field name="inherit_id" ref="sale.view_order_form"/>
         <field name="arch" type="xml">
+            <field name="validity_date" position="before">
+                <field name="print_folded" widget="boolean_toggle"/>
+            </field>
             <xpath expr="//header" position="inside">
                 <!--<field name="is_bom_extracted" invisible="1"/>-->
                 <button name="extract_product_bom" string="Extract BOM" type="object"

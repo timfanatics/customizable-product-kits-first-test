@@ -1,0 +1,24 @@
+#portal_sale_content{
+    #sales_order_table{
+        .sale_tbody{
+            tr.bom_head{
+                background-color: #bdbdbd !important;
+                color:black !important;
+            }
+            tr.sub_kit{
+                background-color: #d2e2e3 !important;
+            }
+        }
+    }
+
+    .d_line_type{
+        float:right;
+        label,input{
+          display:flex;
+          flex-direction:column;
+        }
+        label{
+            font-weight:500;
+        }
+    }
+}
